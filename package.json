@@ -1,0 +1,6 @@
+{
+  "name": "drift-hello-world",
+  "scripts": {
+    "web": "cd packages/web && npm run dev"
+  }
+}
