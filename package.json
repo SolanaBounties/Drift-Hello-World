@@ -4,9 +4,14 @@
   "workspaces": ["backend", "frontend"],
   "engines": { "node": ">=20 <21" },
   "scripts": {
-    "setup": "npm -ws run setup",
+    "setup": "npm --workspace backend run setup",
     "dev": "concurrently -n api,web -c auto \"npm:dev:api\" \"npm:dev:web\"",
     "dev:api": "npm --workspace backend run start:dev",
-    "dev:web": "npm --workspace frontend run dev"
+    "dev:web": "npm --workspace frontend run dev",
+    "sanity": "npm run setup && concurrently -n api -c auto \"npm:dev:api\" --raw & wait-on tcp:3000 && curl -fsS http://localhost:3000/api/seed && curl -fsS http://localhost:3000/api/examples && echo \"\\n✅ Backend & DB OK\" && kill %1 && concurrently -n web -c auto \"npm:dev:web\" --raw & wait-on http://localhost:5173 && echo \"✅ Frontend OK at http://localhost:5173\" && kill %1"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "wait-on": "^9.0.1"
   }
 }
