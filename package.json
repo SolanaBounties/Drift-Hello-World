@@ -1,0 +1,12 @@
+{
+  "name": "drift-monorepo",
+  "private": true,
+  "workspaces": ["backend", "frontend"],
+  "engines": { "node": ">=20 <21" },
+  "scripts": {
+    "setup": "npm -ws run setup",
+    "dev": "concurrently -n api,web -c auto \"npm:dev:api\" \"npm:dev:web\"",
+    "dev:api": "npm --workspace backend run start:dev",
+    "dev:web": "npm --workspace frontend run dev"
+  }
+}
