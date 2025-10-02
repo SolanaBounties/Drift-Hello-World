@@ -3,10 +3,11 @@ import { getDb } from './db';
 
 @Controller()
 export class AppController {
-  @Get('/')
-  health() {
-    return { ok: true, routes: ['/api/seed', '/api/examples'] };
-  }
+  @Get('/')               // <-- now http://localhost:3000 shows { ok: true }
+  root() { return { ok: true }; }
+
+  @Get('/health')
+  health() { return { ok: true }; }
 
   @Get('/api/examples')
   async list() {
@@ -19,7 +20,7 @@ export class AppController {
   @Get('/api/seed')
   async seed() {
     const db = await getDb();
-    await db.run('INSERT INTO examples (name) VALUES (?)', ['hello-drift']);
+    await db.run('INSERT INTO examples (name, is_seed) VALUES (?, 1)', ['hello-drift']);
     await db.close();
     return { ok: true };
   }
