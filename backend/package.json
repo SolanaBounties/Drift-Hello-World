@@ -20,7 +20,16 @@
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "db:init": "node database/init.js",
     "db:clear-seed": "node database/clear-seed.js",
-    "setup": "npm run db:init"
+    "setup": "npm run db:init",
+    "drift:status": "ts-node src/drift-cli.ts status",
+    "drift:init": "ts-node src/drift-cli.ts init",
+    "drift:markets": "ts-node src/drift-cli.ts markets",
+    "drift:positions": "ts-node src/drift-cli.ts positions",
+    "drift:open": "ts-node src/drift-cli.ts open",
+    "drift:close": "ts-node src/drift-cli.ts close",
+    "drift:deposit": "ts-node src/drift-cli.ts deposit",
+    "drift:balance": "ts-node src/drift-cli.ts balance",
+    "drift:init-token": "ts-node src/drift-cli.ts init-token"
   },
   "dependencies": {
     "@drift-labs/sdk": "^2.141.0-beta.4",
@@ -28,6 +37,7 @@
     "@nestjs/config": "^4.0.2",
     "@nestjs/core": "^11.0.1",
     "@nestjs/platform-express": "^11.0.1",
+    "bs58": "^6.0.0",
     "dotenv": "^17.2.3",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
