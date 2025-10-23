@@ -48,3 +48,4 @@ target/types/
 # Keys
 test-ledger/
 .keys/
+backend/.env
