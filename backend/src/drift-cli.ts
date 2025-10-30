@@ -93,7 +93,7 @@ async function checkAccount(): Promise<boolean> {
   const userAccountPk = await getUserAccountPublicKey(
     driftClient.program.programId,
     wallet.publicKey,
-    SUB_ACCOUNT_ID
+    SUB_ACCOUNT_ID,
   );
   const info = await connection.getAccountInfo(userAccountPk);
   const exists = info !== null;
@@ -102,7 +102,8 @@ async function checkAccount(): Promise<boolean> {
   console.log('Account Public Key:', userAccountPk.toBase58());
   console.log('Account Exists:', exists ? 'yes' : 'no');
 
-  if (!exists) console.log('\nInitialize your Drift account with: npm run drift:init');
+  if (!exists)
+    console.log('\nInitialize your Drift account with: npm run drift:init');
   return exists;
 }
 
@@ -151,7 +152,7 @@ async function getCanonicalUsdcAta(): Promise<PublicKey> {
     mint,
     wallet.publicKey,
     false,
-    programId
+    programId,
   );
 
   const info = await connection.getAccountInfo(ata);
@@ -161,13 +162,15 @@ async function getCanonicalUsdcAta(): Promise<PublicKey> {
       ata,
       wallet.publicKey,
       mint,
-      programId
+      programId,
     );
-    const sig = await connection.sendTransaction(new Transaction().add(ix), [wallet.payer]);
+    const sig = await connection.sendTransaction(new Transaction().add(ix), [
+      wallet.payer,
+    ]);
     await connection.confirmTransaction(sig, 'confirmed');
     console.log(
       `Created USDC ATA (${programId.equals(TOKEN_2022_PROGRAM_ID) ? 'token-2022' : 'token'}):`,
-      ata.toBase58()
+      ata.toBase58(),
     );
   }
   return ata;
@@ -194,11 +197,22 @@ async function moveUsdcIntoAta(ata: PublicKey): Promise<number> {
     const amount = acc.amount; // bigint
     if (amount === BigInt(0)) continue;
 
-    const ix = createTransferInstruction(pubkey, ata, wallet.publicKey, amount, [], programId);
-    const sig = await connection.sendTransaction(new Transaction().add(ix), [wallet.payer]);
+    const ix = createTransferInstruction(
+      pubkey,
+      ata,
+      wallet.publicKey,
+      amount,
+      [],
+      programId,
+    );
+    const sig = await connection.sendTransaction(new Transaction().add(ix), [
+      wallet.payer,
+    ]);
     await connection.confirmTransaction(sig, 'confirmed');
 
-    console.log(`Moved ${(Number(amount) / 1e6).toFixed(6)} USDC → ATA (${sig})`);
+    console.log(
+      `Moved ${(Number(amount) / 1e6).toFixed(6)} USDC → ATA (${sig})`,
+    );
     moved += Number(amount);
   }
   return moved;
@@ -219,15 +233,17 @@ async function depositCollateral(amount: number) {
     console.log(`USDC ATA: ${ata.toBase58()} (decimals=${dp}) balance=${bal}`);
 
     if (bal < amount) {
-      console.error(`Insufficient USDC in ATA. Have ${bal}, need ${amount}. Airdrop USDC in Drift Devnet UI, then retry.`);
+      console.error(
+        `Insufficient USDC in ATA. Have ${bal}, need ${amount}. Airdrop USDC in Drift Devnet UI, then retry.`,
+      );
       return;
     }
 
     const depositAmount = new BN(Math.round(amount * 10 ** dp));
     const tx = await driftClient.deposit(
       depositAmount,
-      0,   // spot market index for USDC on devnet
-      ata  // must be same token program as the mint
+      0, // spot market index for USDC on devnet
+      ata, // must be same token program as the mint
     );
     const sig = Array.isArray(tx) ? tx[0] : tx;
 
@@ -247,7 +263,10 @@ async function doctor() {
   // Wallet token accounts for USDC — only under the correct token program
   const mint = getUsdcMint();
   const programId = await getMintProgramId(mint);
-  const list = await connection.getTokenAccountsByOwner(wallet.publicKey, { mint, programId });
+  const list = await connection.getTokenAccountsByOwner(wallet.publicKey, {
+    mint,
+    programId,
+  });
 
   if (list.value.length === 0) {
     console.log('\n❌ No USDC token accounts found for your wallet.');
@@ -258,7 +277,9 @@ async function doctor() {
       try {
         const acc = await getAccount(connection, pubkey);
         const dec = (await getMint(connection, acc.mint)).decimals;
-        console.log(`  ${pubkey.toBase58()}  balance=${Number(acc.amount) / 10 ** dec}`);
+        console.log(
+          `  ${pubkey.toBase58()}  balance=${Number(acc.amount) / 10 ** dec}`,
+        );
       } catch {}
     }
   }
@@ -271,7 +292,9 @@ async function doctor() {
   if (spots.length === 0) console.log('  (none)');
   for (const s of spots) {
     const m = SpotMarkets['devnet'][s.marketIndex];
-    console.log(`  ${m.symbol} (market ${s.marketIndex}) scaledBalance=${s.scaledBalance.toString()}`);
+    console.log(
+      `  ${m.symbol} (market ${s.marketIndex}) scaledBalance=${s.scaledBalance.toString()}`,
+    );
   }
 
   // Simple risk view (use helpers on `User`)
@@ -292,14 +315,20 @@ async function doctor() {
 function toBaseAmount(size: number, marketIndex: number): BN {
   const raw = Math.round(size * BASE);
   let minStep = 1;
-  if (marketIndex === 0) minStep = 10_000_000; // SOL-PERP: 0.01
-  else if (marketIndex === 1) minStep = 100_000; // ETH-PERP: 0.0001
+  if (marketIndex === 0)
+    minStep = 10_000_000; // SOL-PERP: 0.01
+  else if (marketIndex === 1)
+    minStep = 100_000; // ETH-PERP: 0.0001
   else if (marketIndex === 2) minStep = 1_000_000; // BTC-PERP: typical
   const adjusted = Math.max(raw, minStep);
   return new BN(adjusted);
 }
 
-async function openPosition(marketIndex: number, direction: 'long' | 'short', size: number) {
+async function openPosition(
+  marketIndex: number,
+  direction: 'long' | 'short',
+  size: number,
+) {
   console.log(`\nOpening ${direction.toUpperCase()} position`);
   console.log(`Market Index: ${marketIndex}`);
   console.log(`Size: ${size} units`);
@@ -313,12 +342,15 @@ async function openPosition(marketIndex: number, direction: 'long' | 'short', si
     const txSig = await driftClient.placePerpOrder({
       orderType: OrderType.MARKET,
       marketIndex,
-      direction: direction === 'long' ? PositionDirection.LONG : PositionDirection.SHORT,
+      direction:
+        direction === 'long' ? PositionDirection.LONG : PositionDirection.SHORT,
       baseAssetAmount: baseAmount,
     });
 
     console.log('Order sent:', txSig);
-    console.log(`View on Solscan: https://solscan.io/tx/${txSig}?cluster=devnet`);
+    console.log(
+      `View on Solscan: https://solscan.io/tx/${txSig}?cluster=devnet`,
+    );
 
     await driftClient.fetchAccounts();
     const user = driftClient.getUser(SUB_ACCOUNT_ID);
@@ -326,7 +358,9 @@ async function openPosition(marketIndex: number, direction: 'long' | 'short', si
     if (pos && !pos.baseAssetAmount.eq(new BN(0))) {
       console.log('Opened base:', pos.baseAssetAmount.toString());
     } else {
-      console.log('No non-zero position recorded after order. Check collateral/fills.');
+      console.log(
+        'No non-zero position recorded after order. Check collateral/fills.',
+      );
     }
   } catch (e: any) {
     console.error('Error opening position:', e?.message || e);
@@ -360,7 +394,9 @@ async function closePosition(marketIndex: number) {
     });
 
     console.log('Close sent:', txSig);
-    console.log(`View on Solscan: https://solscan.io/tx/${txSig}?cluster=devnet`);
+    console.log(
+      `View on Solscan: https://solscan.io/tx/${txSig}?cluster=devnet`,
+    );
   } catch (e: any) {
     console.error('Error closing position:', e?.message || e);
   }
@@ -384,7 +420,9 @@ async function getAccountValue() {
     } else {
       for (const s of spots) {
         const m = SpotMarkets['devnet'][s.marketIndex];
-        console.log(`  ${m.symbol} (market ${s.marketIndex}): scaledBalance=${s.scaledBalance.toString()}`);
+        console.log(
+          `  ${m.symbol} (market ${s.marketIndex}): scaledBalance=${s.scaledBalance.toString()}`,
+        );
       }
     }
   } catch (e: any) {
@@ -407,7 +445,9 @@ async function getPositions() {
   }
 
   for (const p of positions) {
-    const market = PerpMarkets['devnet'].find((m) => m.marketIndex === p.marketIndex);
+    const market = PerpMarkets['devnet'].find(
+      (m) => m.marketIndex === p.marketIndex,
+    );
     const isLong = p.baseAssetAmount.gt(new BN(0));
     const size = p.baseAssetAmount.abs().toNumber() / BASE;
 
@@ -421,7 +461,9 @@ async function getPositions() {
           .toNumber() / 1_000_000;
     }
 
-    console.log(`\n  Market: ${market?.symbol ?? `Market ${p.marketIndex}`} (index ${p.marketIndex})`);
+    console.log(
+      `\n  Market: ${market?.symbol ?? `Market ${p.marketIndex}`} (index ${p.marketIndex})`,
+    );
     console.log(`  Direction: ${isLong ? 'LONG' : 'SHORT'}`);
     console.log(`  Size: ${size.toFixed(6)}`);
     console.log(`  Entry Price: $${entryPrice.toFixed(2)}`);
@@ -490,12 +532,22 @@ async function main() {
         console.log('  npm run drift:status     - Check account status');
         console.log('  npm run drift:init       - Initialize Drift account');
         console.log('  npm run drift:markets    - List available markets');
-        console.log('  npm run drift:deposit    - Deposit USDC collateral (params: amount)');
-        console.log('  npm run drift:balance    - Check account collateral (spot)');
+        console.log(
+          '  npm run drift:deposit    - Deposit USDC collateral (params: amount)',
+        );
+        console.log(
+          '  npm run drift:balance    - Check account collateral (spot)',
+        );
         console.log('  npm run drift:positions  - View perp positions');
-        console.log('  npm run drift:open       - Open position (params: marketIndex direction size)');
-        console.log('  npm run drift:close      - Close position (params: marketIndex)');
-        console.log('  npm run drift:doctor     - Debug wallet USDC + Drift spot');
+        console.log(
+          '  npm run drift:open       - Open position (params: marketIndex direction size)',
+        );
+        console.log(
+          '  npm run drift:close      - Close position (params: marketIndex)',
+        );
+        console.log(
+          '  npm run drift:doctor     - Debug wallet USDC + Drift spot',
+        );
         console.log('\nExamples:');
         console.log('  npm run drift:deposit 100');
         console.log('  npm run drift:open 0 long 0.01');
