@@ -29,7 +29,11 @@
     "drift:close": "ts-node src/drift-cli.ts close",
     "drift:deposit": "ts-node src/drift-cli.ts deposit",
     "drift:balance": "ts-node src/drift-cli.ts balance",
-    "drift:init-token": "ts-node src/drift-cli.ts init-token"
+    "drift:init-token": "ts-node src/drift-cli.ts init-token",
+    "drift": "ts-node src/drift-cli.ts",
+    "drift:help": "ts-node src/drift-cli.ts",
+    "drift:close-all": "ts-node src/drift-cli.ts close-all",
+    "drift:withdraw": "ts-node src/drift-cli.ts withdraw"
   },
   "dependencies": {
     "@drift-labs/sdk": "^2.141.0-beta.4",
