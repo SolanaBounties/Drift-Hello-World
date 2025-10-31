@@ -278,47 +278,34 @@ export class DriftService implements OnModuleInit, OnModuleDestroy {
   }
 
   async open(marketIndex: number, direction: Direction, size: number) {
-    try {
-      const userAccountPk = await getUserAccountPublicKey(
-        this.driftClient.program.programId,
-        this.wallet.publicKey,
-        this.subAccountId,
-      );
-      const info = await this.connection.getAccountInfo(userAccountPk);
-      if (!info) {
-        return {
-          ok: false,
-          message: 'Drift account not initialized',
-        };
-      }
+    const userAccountPk = await getUserAccountPublicKey(
+      this.driftClient.program.programId,
+      this.wallet.publicKey,
+      this.subAccountId,
+    );
+    const info = await this.connection.getAccountInfo(userAccountPk);
+    if (!info) throw new Error('Drift account not initialized');
 
-      const baseAmount = this.toBaseAmount(size, marketIndex);
-      const txSig = await this.driftClient.placePerpOrder({
-        orderType: OrderType.MARKET,
-        marketIndex,
-        direction:
-          direction === 'long' ? PositionDirection.LONG : PositionDirection.SHORT,
-        baseAssetAmount: baseAmount,
-      });
+    const baseAmount = this.toBaseAmount(size, marketIndex);
+    const txSig = await this.driftClient.placePerpOrder({
+      orderType: OrderType.MARKET,
+      marketIndex,
+      direction:
+        direction === 'long' ? PositionDirection.LONG : PositionDirection.SHORT,
+      baseAssetAmount: baseAmount,
+    });
 
-      await this.driftClient.fetchAccounts();
-      const user = this.driftClient.getUser(this.subAccountId);
-      const pos = user.getPerpPosition(marketIndex);
+    // Refresh & echo state
+    await this.driftClient.fetchAccounts();
+    const user = this.driftClient.getUser(this.subAccountId);
+    const pos = user.getPerpPosition(marketIndex);
 
-      return {
-        ok: true,
-        signature: txSig,
-        opened: pos ? !pos.baseAssetAmount.eq(new BN(0)) : false,
-        rawBase: pos?.baseAssetAmount?.toString() ?? '0',
-        solscan: `https://solscan.io/tx/${txSig}?cluster=devnet`,
-      };
-    } catch (e: any) {
-      this.logger.error('Failed to open position:', e.message);
-      return {
-        ok: false,
-        message: e.message || 'Failed to open position',
-      };
-    }
+    return {
+      signature: txSig,
+      opened: pos ? !pos.baseAssetAmount.eq(new BN(0)) : false,
+      rawBase: pos?.baseAssetAmount?.toString() ?? '0',
+      solscan: `https://solscan.io/tx/${txSig}?cluster=devnet`,
+    };
   }
 
   async close(marketIndex: number) {
