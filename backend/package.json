@@ -1,26 +1,15 @@
 {
-  "name": "backend",
-  "version": "0.0.1",
-  "description": "",
-  "author": "",
+  "name": "drift-backend",
+  "version": "1.0.0",
+  "description": "Drift Protocol NestJS Backend",
   "private": true,
-  "license": "UNLICENSED",
+  "license": "MIT",
   "scripts": {
     "build": "nest build",
-    "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
     "start:dev": "nest start --watch",
-    "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
-    "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
-    "test": "jest",
-    "test:watch": "jest --watch",
-    "test:cov": "jest --coverage",
-    "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json",
-    "db:init": "node database/init.js",
-    "db:clear-seed": "node database/clear-seed.js",
-    "setup": "npm run db:init",
+    "lint": "eslint \"{src,apps,libs}/**/*.ts\" --fix",
     "drift:status": "ts-node src/drift-cli.ts status",
     "drift:init": "ts-node src/drift-cli.ts init",
     "drift:markets": "ts-node src/drift-cli.ts markets",
@@ -29,11 +18,8 @@
     "drift:close": "ts-node src/drift-cli.ts close",
     "drift:deposit": "ts-node src/drift-cli.ts deposit",
     "drift:balance": "ts-node src/drift-cli.ts balance",
-    "drift:init-token": "ts-node src/drift-cli.ts init-token",
-    "drift": "ts-node src/drift-cli.ts",
-    "drift:help": "ts-node src/drift-cli.ts",
-    "drift:close-all": "ts-node src/drift-cli.ts close-all",
-    "drift:withdraw": "ts-node src/drift-cli.ts withdraw"
+    "drift:doctor": "ts-node src/drift-cli.ts doctor",
+    "drift": "ts-node src/drift-cli.ts"
   },
   "dependencies": {
     "@drift-labs/sdk": "^2.141.0-beta.4",
@@ -41,54 +27,28 @@
     "@nestjs/config": "^4.0.2",
     "@nestjs/core": "^11.0.1",
     "@nestjs/platform-express": "^11.0.1",
+    "@solana/spl-token": "^0.4.9",
+    "@solana/web3.js": "^1.98.4",
     "bs58": "^6.0.0",
     "dotenv": "^17.2.3",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.1",
-    "sqlite": "^5.1.1",
-    "sqlite3": "^5.1.7"
+    "rxjs": "^7.8.1"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
     "@eslint/js": "^9.18.0",
     "@nestjs/cli": "^11.0.0",
     "@nestjs/schematics": "^11.0.0",
-    "@nestjs/testing": "^11.0.1",
     "@types/express": "^5.0.0",
-    "@types/jest": "^30.0.0",
     "@types/node": "^22.10.7",
-    "@types/sqlite3": "^3.1.11",
-    "@types/supertest": "^6.0.2",
     "eslint": "^9.18.0",
     "eslint-config-prettier": "^10.0.1",
     "eslint-plugin-prettier": "^5.2.2",
     "globals": "^16.0.0",
-    "jest": "^30.0.0",
     "prettier": "^3.4.2",
-    "source-map-support": "^0.5.21",
-    "supertest": "^7.0.0",
-    "ts-jest": "^29.2.5",
-    "ts-loader": "^9.5.2",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
     "typescript": "^5.7.3",
     "typescript-eslint": "^8.20.0"
-  },
-  "jest": {
-    "moduleFileExtensions": [
-      "js",
-      "json",
-      "ts"
-    ],
-    "rootDir": "src",
-    "testRegex": ".*\\.spec\\.ts$",
-    "transform": {
-      "^.+\\.(t|j)s$": "ts-jest"
-    },
-    "collectCoverageFrom": [
-      "**/*.(t|j)s"
-    ],
-    "coverageDirectory": "../coverage",
-    "testEnvironment": "node"
   }
 }

@@ -1,5 +1,10 @@
 {
-  "name": "drift-monorepo",
+  "name": "drift-protocol-starter",
+  "version": "1.0.0",
+  "displayName": "Drift Protocol Trading Starter",
+  "description": "Full-stack starter for building trading applications on Drift Protocol with NestJS backend and React frontend",
+  "usecase": "DeFi",
+  "keywords": ["solana", "drift", "trading", "defi", "perps", "nestjs", "react"],
   "private": true,
   "workspaces": [
     "backend",
@@ -9,24 +14,12 @@
     "node": ">=20 <21"
   },
   "scripts": {
-    "setup": "npm --workspace backend run setup",
     "dev": "concurrently -n api,web -c auto \"npm:dev:api\" \"npm:dev:web\"",
     "dev:api": "npm --workspace backend run start:dev",
     "dev:web": "npm --workspace frontend run dev",
-    "sanity:api": "start-server-and-test \"npm --workspace backend run start:dev\" http-get://localhost:3000/health \"curl -fsS http://localhost:3000/api/seed && curl -fsS http://localhost:3000/api/examples && echo '✅ Backend & DB OK'\"",
-    "sanity:web": "start-server-and-test \"npm --workspace frontend run dev\" http://localhost:5173 \"echo '✅ Frontend OK at http://localhost:5173'\"",
-    "sanity": "npm run setup && npm run sanity:api && npm run sanity:web",
-    "up": "npm run setup && npm run dev",
-    "key:export": "node --input-type=module -e \"import fs from 'node:fs'; import bs58 from 'bs58'; import {Keypair} from '@solana/web3.js'; const keyPath=process.argv[2]||'./mainnet-keypair.json'; if(!fs.existsSync(keyPath)){console.error('Keypair file not found:',keyPath); process.exit(1);} const arr=JSON.parse(fs.readFileSync(keyPath,'utf8')); const secret=Uint8Array.from(arr); const b58=bs58.encode(secret); const pub=Keypair.fromSecretKey(secret).publicKey.toBase58(); const envPath='.env'; let env=fs.existsSync(envPath)?fs.readFileSync(envPath,'utf8'):''; const prefix='SECRET_KEY_BASE58='; const outLines=env.split('\\n').filter(l=>!l.startsWith(prefix) && l.trim().length>0); outLines.push(prefix+b58); fs.writeFileSync(envPath,outLines.join('\\n')+'\\n','utf8'); console.log('Wrote SECRET_KEY_BASE58 to .env'); console.log('Public key:', pub);\""
+    "build": "npm --workspace backend run build && npm --workspace frontend run build"
   },
   "devDependencies": {
-    "concurrently": "^9.2.1",
-    "start-server-and-test": "^2.1.2",
-    "wait-on": "^9.0.1"
-  },
-  "dependencies": {
-    "@solana/web3.js": "^1.98.4",
-    "bs58": "^6.0.0",
-    "dotenv": "^17.2.3"
+    "concurrently": "^9.2.1"
   }
 }

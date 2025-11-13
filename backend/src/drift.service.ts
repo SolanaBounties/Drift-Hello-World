@@ -1,4 +1,3 @@
-// src/drift/drift.service.ts
 import {
   Injectable,
   OnModuleInit,
@@ -43,12 +42,11 @@ export class DriftService implements OnModuleInit, OnModuleDestroy {
   private connection!: Connection;
   private wallet!: Wallet;
 
-  // Config
   private readonly rpcUrl =
     process.env.RPC_URL || 'https://api.devnet.solana.com';
   private readonly commitment: Commitment = 'confirmed';
   private readonly subAccountId = 0;
-  private readonly BASE = 1_000_000_000; // base precision for perps
+  private readonly BASE = 1_000_000_000;
 
   async onModuleInit() {
     await this.initialize();
@@ -60,7 +58,6 @@ export class DriftService implements OnModuleInit, OnModuleDestroy {
     } catch {}
   }
 
-  /** ---------- Bootstrap ---------- */
   private async initialize() {
     const secretKey = process.env.SECRET_KEY_BASE58;
     if (!secretKey) {
@@ -84,9 +81,7 @@ export class DriftService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
-  /** ---------- Helpers ---------- */
   private getUsdcMint(): PublicKey {
-    // Spot 0 is USDC on devnet per SDK table
     return new PublicKey(SpotMarkets['devnet'][0].mint);
   }
 
@@ -143,7 +138,7 @@ export class DriftService implements OnModuleInit, OnModuleDestroy {
       if (!info) continue;
 
       const acc = await getAccount(this.connection, pubkey);
-      const amount = acc.amount; // bigint
+      const amount = acc.amount;
       if (amount === BigInt(0)) continue;
 
       const ix = createTransferInstruction(
@@ -171,14 +166,12 @@ export class DriftService implements OnModuleInit, OnModuleDestroy {
     const raw = Math.round(size * this.BASE);
     let minStep = 1;
     if (marketIndex === 0)
-      minStep = 10_000_000; // SOL-PERP: 0.01
+      minStep = 10_000_000;
     else if (marketIndex === 1)
-      minStep = 100_000; // ETH-PERP: 0.0001
-    else if (marketIndex === 2) minStep = 1_000_000; // BTC-PERP: typical
+      minStep = 100_000;
+    else if (marketIndex === 2) minStep = 1_000_000;
     return new BN(Math.max(raw, minStep));
   }
-
-  /** ---------- Public API (call these from Controller) ---------- */
 
   async status() {
     const userAccountPk = await getUserAccountPublicKey(
@@ -235,7 +228,7 @@ export class DriftService implements OnModuleInit, OnModuleDestroy {
         !p.quoteAssetAmount.eq(new BN(0)) &&
         !p.baseAssetAmount.eq(new BN(0))
       ) {
-        const quote = p.quoteAssetAmount.abs().toNumber() / 1_000_000; // quote precision
+        const quote = p.quoteAssetAmount.abs().toNumber() / 1_000_000;
         const base = p.baseAssetAmount.abs().toNumber() / this.BASE;
         entryPrice = quote / base;
       }
@@ -348,9 +341,7 @@ export class DriftService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  /** Optional: deposit USDC collateral (only if you airdropped the exact devnet USDC mint Drift uses) */
   async depositUsdc(amount: number) {
-    // Ensure drift account
     const userAccountPk = await getUserAccountPublicKey(
       this.driftClient.program.programId,
       this.wallet.publicKey,
@@ -378,7 +369,7 @@ export class DriftService implements OnModuleInit, OnModuleDestroy {
     }
 
     const depositAmount = new BN(Math.round(amount * 10 ** dp));
-    const tx = await this.driftClient.deposit(depositAmount, 0, ata); // spot 0 = USDC
+    const tx = await this.driftClient.deposit(depositAmount, 0, ata);
     const sig = Array.isArray(tx) ? tx[0] : tx;
 
     return {
@@ -388,12 +379,9 @@ export class DriftService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  /** Doctor: quick debug data for UI */
-  /** Doctor: quick debug data for UI */
   async doctor() {
     const status = await this.status();
 
-    // Wallet USDC accounts under the correct token program only
     const mint = this.getUsdcMint();
     const programId = await this.getMintProgramId(mint);
     const list = await this.connection.getTokenAccountsByOwner(
@@ -414,9 +402,7 @@ export class DriftService implements OnModuleInit, OnModuleDestroy {
           account: pubkey.toBase58(),
           balance: Number(acc.amount) / 10 ** dec,
         });
-      } catch {
-        // ignore unreadable accounts
-      }
+      } catch {}
     }
 
     const risk = await this.accountValue();

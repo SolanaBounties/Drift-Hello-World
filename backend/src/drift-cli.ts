@@ -1,5 +1,3 @@
-// src/drift-cli.ts
-
 import {
   DriftClient,
   Wallet,
@@ -25,10 +23,6 @@ import {
   createTransferInstruction,
 } from '@solana/spl-token';
 
-// -----------------------------------------------------------------------------
-// Env / Globals
-// -----------------------------------------------------------------------------
-
 config();
 
 let driftClient: DriftClient;
@@ -37,23 +31,17 @@ let connection: Connection;
 
 const DEFAULT_RPC = process.env.RPC_URL || 'https://api.devnet.solana.com';
 const SUB_ACCOUNT_ID = 0;
-const BASE = 1_000_000_000; // perp base precision
+const BASE = 1_000_000_000;
 
-// USDC mint (spot market 0) — derive from SDK table at runtime
 function getUsdcMint(): PublicKey {
   return new PublicKey(SpotMarkets['devnet'][0].mint);
 }
 
-// Detect which token program the mint lives under (classic vs token-2022)
 async function getMintProgramId(mint: PublicKey): Promise<PublicKey> {
   const info = await connection.getAccountInfo(mint);
   if (!info) throw new Error('USDC mint account not found on chain');
   return info.owner;
 }
-
-// -----------------------------------------------------------------------------
-// Bootstrap
-// -----------------------------------------------------------------------------
 
 async function initializeDrift() {
   connection = new Connection(DEFAULT_RPC, 'confirmed');
@@ -85,10 +73,6 @@ async function getSolBalance(): Promise<number> {
   return sol;
 }
 
-// -----------------------------------------------------------------------------
-// Account helpers
-// -----------------------------------------------------------------------------
-
 async function checkAccount(): Promise<boolean> {
   const userAccountPk = await getUserAccountPublicKey(
     driftClient.program.programId,
@@ -102,31 +86,26 @@ async function checkAccount(): Promise<boolean> {
   console.log('Account Public Key:', userAccountPk.toBase58());
   console.log('Account Exists:', exists ? 'yes' : 'no');
 
-  if (!exists)
-    console.log('\nInitialize your Drift account with: npm run drift:init');
+  if (!exists) console.log('\nRun "npm run drift:init" to create account');
   return exists;
 }
 
 async function initializeAccount() {
-  console.log('\nInitializing Drift account...');
+  console.log('\nInitializing account...');
   try {
     const tx = await driftClient.initializeUserAccount(SUB_ACCOUNT_ID);
     const sig = Array.isArray(tx) ? tx[0] : tx;
-    console.log('Account initialized');
-    console.log('Transaction:', sig);
+    console.log('Initialized');
+    console.log('TX:', sig);
   } catch (e: any) {
     const msg = String(e?.message || '');
     if (msg.includes('already') || msg.includes('0x0')) {
-      console.log('Account already exists');
+      console.log('Account exists');
     } else {
       throw e;
     }
   }
 }
-
-// -----------------------------------------------------------------------------
-// Market listing
-// -----------------------------------------------------------------------------
 
 async function listMarkets() {
   const perps = PerpMarkets['devnet'];
@@ -139,11 +118,6 @@ async function listMarkets() {
   spots.forEach((m) => console.log(`  ${m.marketIndex}: ${m.symbol}`));
 }
 
-// -----------------------------------------------------------------------------
-// Collateral: ensure ATA and deposit
-// -----------------------------------------------------------------------------
-
-// Ensure/get ATA for USDC under the mint's ACTUAL program (classic or token-2022)
 async function getCanonicalUsdcAta(): Promise<PublicKey> {
   const mint = getUsdcMint();
   const programId = await getMintProgramId(mint);
@@ -176,7 +150,6 @@ async function getCanonicalUsdcAta(): Promise<PublicKey> {
   return ata;
 }
 
-// Sweep any USDC in other accounts (same program as mint) into the canonical ATA
 async function moveUsdcIntoAta(ata: PublicKey): Promise<number> {
   const mint = getUsdcMint();
   const programId = await getMintProgramId(mint);
@@ -194,7 +167,7 @@ async function moveUsdcIntoAta(ata: PublicKey): Promise<number> {
     if (!info) continue;
 
     const acc = await getAccount(connection, pubkey);
-    const amount = acc.amount; // bigint
+    const amount = acc.amount;
     if (amount === BigInt(0)) continue;
 
     const ix = createTransferInstruction(
@@ -228,7 +201,7 @@ async function depositCollateral(amount: number) {
 
     const acc = await getAccount(connection, ata);
     const mintInfo = await getMint(connection, acc.mint);
-    const dp = mintInfo.decimals; // USDC on devnet typically 6
+    const dp = mintInfo.decimals;
     const bal = Number(acc.amount) / 10 ** dp;
     console.log(`USDC ATA: ${ata.toBase58()} (decimals=${dp}) balance=${bal}`);
 
@@ -242,25 +215,23 @@ async function depositCollateral(amount: number) {
     const depositAmount = new BN(Math.round(amount * 10 ** dp));
     const tx = await driftClient.deposit(
       depositAmount,
-      0, // spot market index for USDC on devnet
-      ata, // must be same token program as the mint
+      0,
+      ata,
     );
     const sig = Array.isArray(tx) ? tx[0] : tx;
 
-    console.log('Deposit successful');
-    console.log('Transaction:', sig);
-    console.log(`https://solscan.io/tx/${sig}?cluster=devnet`);
+    console.log('Deposited');
+    console.log('TX:', sig);
+    console.log(`View: https://solscan.io/tx/${sig}?cluster=devnet`);
   } catch (e: any) {
     console.error('Error during deposit:', e?.message || e);
   }
 }
 
-// Quick diagnostics for wallet USDC + Drift spot
 async function doctor() {
-  console.log('\n🔎 Drift Doctor: Collateral & Accounts');
+  console.log('\nDrift Doctor: Collateral & Accounts');
   await checkAccount();
 
-  // Wallet token accounts for USDC — only under the correct token program
   const mint = getUsdcMint();
   const programId = await getMintProgramId(mint);
   const list = await connection.getTokenAccountsByOwner(wallet.publicKey, {
@@ -269,10 +240,10 @@ async function doctor() {
   });
 
   if (list.value.length === 0) {
-    console.log('\n❌ No USDC token accounts found for your wallet.');
-    console.log('→ Use Drift Devnet UI to Airdrop USDC to your wallet first.');
+    console.log('\nNo USDC token accounts found for your wallet.');
+    console.log('Use Drift Devnet UI to Airdrop USDC to your wallet first.');
   } else {
-    console.log(`\n👛 Wallet USDC accounts (${list.value.length}):`);
+    console.log(`\nWallet USDC accounts (${list.value.length}):`);
     for (const { pubkey } of list.value) {
       try {
         const acc = await getAccount(connection, pubkey);
@@ -284,11 +255,10 @@ async function doctor() {
     }
   }
 
-  // Drift spot positions
   await driftClient.fetchAccounts();
   const user = driftClient.getUser(SUB_ACCOUNT_ID);
   const spots = user.getActiveSpotPositions();
-  console.log('\n🏦 Drift Spot Positions:');
+  console.log('\nDrift Spot Positions:');
   if (spots.length === 0) console.log('  (none)');
   for (const s of spots) {
     const m = SpotMarkets['devnet'][s.marketIndex];
@@ -297,29 +267,24 @@ async function doctor() {
     );
   }
 
-  // Simple risk view (use helpers on `User`)
   const totalCollat = (user.getTotalCollateral() ?? new BN(0)).toString();
   const imr = (user.getInitialMarginRequirement() ?? new BN(0)).toString();
   const mmr = (user.getMaintenanceMarginRequirement() ?? new BN(0)).toString();
 
-  console.log('\n📐 Quick risk view:');
+  console.log('\nQuick risk view:');
   console.log('  totalCollateral:', totalCollat);
   console.log('  initialMarginRequirement:', imr);
   console.log('  maintenanceMarginRequirement:', mmr);
 }
 
-// -----------------------------------------------------------------------------
-// Perp trading
-// -----------------------------------------------------------------------------
-
 function toBaseAmount(size: number, marketIndex: number): BN {
   const raw = Math.round(size * BASE);
   let minStep = 1;
   if (marketIndex === 0)
-    minStep = 10_000_000; // SOL-PERP: 0.01
+    minStep = 10_000_000;
   else if (marketIndex === 1)
-    minStep = 100_000; // ETH-PERP: 0.0001
-  else if (marketIndex === 2) minStep = 1_000_000; // BTC-PERP: typical
+    minStep = 100_000;
+  else if (marketIndex === 2) minStep = 1_000_000;
   const adjusted = Math.max(raw, minStep);
   return new BN(adjusted);
 }
@@ -347,10 +312,8 @@ async function openPosition(
       baseAssetAmount: baseAmount,
     });
 
-    console.log('Order sent:', txSig);
-    console.log(
-      `View on Solscan: https://solscan.io/tx/${txSig}?cluster=devnet`,
-    );
+    console.log('Opened:', txSig);
+    console.log(`https://solscan.io/tx/${txSig}?cluster=devnet`);
 
     await driftClient.fetchAccounts();
     const user = driftClient.getUser(SUB_ACCOUNT_ID);
@@ -393,18 +356,12 @@ async function closePosition(marketIndex: number) {
       reduceOnly: true,
     });
 
-    console.log('Close sent:', txSig);
-    console.log(
-      `View on Solscan: https://solscan.io/tx/${txSig}?cluster=devnet`,
-    );
+    console.log('Closed:', txSig);
+    console.log(`https://solscan.io/tx/${txSig}?cluster=devnet`);
   } catch (e: any) {
     console.error('Error closing position:', e?.message || e);
   }
 }
-
-// -----------------------------------------------------------------------------
-// Read Account Value / Positions
-// -----------------------------------------------------------------------------
 
 async function getAccountValue() {
   if (!(await checkAccount())) return;
@@ -471,10 +428,6 @@ async function getPositions() {
   }
 }
 
-// -----------------------------------------------------------------------------
-// CLI
-// -----------------------------------------------------------------------------
-
 async function main() {
   const command = process.argv[2];
 
@@ -528,26 +481,16 @@ async function main() {
         break;
 
       default:
-        console.log('\nAvailable commands:');
-        console.log('  npm run drift:status     - Check account status');
-        console.log('  npm run drift:init       - Initialize Drift account');
-        console.log('  npm run drift:markets    - List available markets');
-        console.log(
-          '  npm run drift:deposit    - Deposit USDC collateral (params: amount)',
-        );
-        console.log(
-          '  npm run drift:balance    - Check account collateral (spot)',
-        );
-        console.log('  npm run drift:positions  - View perp positions');
-        console.log(
-          '  npm run drift:open       - Open position (params: marketIndex direction size)',
-        );
-        console.log(
-          '  npm run drift:close      - Close position (params: marketIndex)',
-        );
-        console.log(
-          '  npm run drift:doctor     - Debug wallet USDC + Drift spot',
-        );
+        console.log('\nDrift CLI Commands:');
+        console.log('  drift:status     - Account status');
+        console.log('  drift:init       - Initialize account');
+        console.log('  drift:markets    - List markets');
+        console.log('  drift:deposit    - Deposit USDC');
+        console.log('  drift:balance    - Check balance');
+        console.log('  drift:positions  - View positions');
+        console.log('  drift:open       - Open position');
+        console.log('  drift:close      - Close position');
+        console.log('  drift:doctor     - Debug info');
         console.log('\nExamples:');
         console.log('  npm run drift:deposit 100');
         console.log('  npm run drift:open 0 long 0.01');
