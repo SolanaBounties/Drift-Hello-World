@@ -1,3 +1,6 @@
+// CLI tool for interacting with Drift Protocol on Solana Devnet
+// this does the account management, depositing collateral, and trading perpetuals
+
 import {
   DriftClient,
   Wallet,
@@ -30,19 +33,22 @@ let wallet: Wallet;
 let connection: Connection;
 
 const DEFAULT_RPC = process.env.RPC_URL || 'https://api.devnet.solana.com';
-const SUB_ACCOUNT_ID = 0;
-const BASE = 1_000_000_000;
+const SUB_ACCOUNT_ID = 0;  // Use first sub-account
+const BASE = 1_000_000_000;  // 9 decimal precision for perp sizes
 
+// Get USDC mint address from Drift's devnet configuration
 function getUsdcMint(): PublicKey {
   return new PublicKey(SpotMarkets['devnet'][0].mint);
 }
 
+// Determine which token program (standard or Token-2022) owns this mint
 async function getMintProgramId(mint: PublicKey): Promise<PublicKey> {
   const info = await connection.getAccountInfo(mint);
   if (!info) throw new Error('USDC mint account not found on chain');
   return info.owner;
 }
 
+// Initialize connection to Drift Protocol on Solana Devnet
 async function initializeDrift() {
   connection = new Connection(DEFAULT_RPC, 'confirmed');
 
@@ -55,6 +61,7 @@ async function initializeDrift() {
   console.log('Connecting to Drift on Devnet...');
   console.log('Wallet:', wallet.publicKey.toBase58());
 
+  // Initialize Drift client - handles all protocol interactions
   driftClient = new DriftClient({
     connection,
     wallet,
@@ -62,6 +69,7 @@ async function initializeDrift() {
     activeSubAccountId: SUB_ACCOUNT_ID,
   });
 
+  // Subscribe to real-time account updates
   await driftClient.subscribe();
   console.log('Connected to Drift Protocol');
 }
@@ -191,6 +199,8 @@ async function moveUsdcIntoAta(ata: PublicKey): Promise<number> {
   return moved;
 }
 
+// Deposit USDC collateral to Drift account
+// Collateral is required to open leveraged positions
 async function depositCollateral(amount: number) {
   console.log(`\nDepositing ${amount} USDC as collateral...`);
   if (!(await checkAccount())) return;
@@ -213,10 +223,53 @@ async function depositCollateral(amount: number) {
     }
 
     const depositAmount = new BN(Math.round(amount * 10 ** dp));
+    // Deposit to spot market 0 (USDC)
     const tx = await driftClient.deposit(
       depositAmount,
       0,
       ata,
+    );
+    const sig = Array.isArray(tx) ? tx[0] : tx;
+
+    console.log('Deposited');
+    console.log('TX:', sig);
+    console.log(`View: https://solscan.io/tx/${sig}?cluster=devnet`);
+  } catch (e: any) {
+    console.error('Error during deposit:', e?.message || e);
+  }
+}
+
+async function depositSolCollateral(amount: number) {
+  console.log(`\nDepositing ${amount} SOL as collateral...`);
+  if (!(await checkAccount())) return;
+
+  try {
+    const walletLamports = await connection.getBalance(wallet.publicKey);
+    const walletSol = walletLamports / 1e9;
+    const minReserve = 0.05;
+
+    console.log(`Wallet balance: ${walletSol} SOL`);
+
+    if (walletSol < amount + minReserve) {
+      console.error(
+        `Insufficient SOL. Have ${walletSol}, need ${amount} + ${minReserve} (for tx fees)`,
+      );
+      return;
+    }
+
+    const solMarketIndex = SpotMarkets['devnet'].findIndex(
+      (m) => m.symbol === 'SOL',
+    );
+    if (solMarketIndex === -1) {
+      console.error('SOL spot market not found in Drift devnet config');
+      return;
+    }
+
+    const depositAmount = new BN(Math.round(amount * 1e9));
+    const tx = await driftClient.deposit(
+      depositAmount,
+      solMarketIndex,
+      wallet.publicKey,
     );
     const sig = Array.isArray(tx) ? tx[0] : tx;
 
@@ -277,18 +330,23 @@ async function doctor() {
   console.log('  maintenanceMarginRequirement:', mmr);
 }
 
+// Convert human-readable size to base units
+// Enforces minimum step sizes per market
 function toBaseAmount(size: number, marketIndex: number): BN {
   const raw = Math.round(size * BASE);
   let minStep = 1;
   if (marketIndex === 0)
-    minStep = 10_000_000;
+    minStep = 10_000_000;  // SOL-PERP: 0.01 minimum
   else if (marketIndex === 1)
-    minStep = 100_000;
-  else if (marketIndex === 2) minStep = 1_000_000;
+    minStep = 100_000;  // ETH-PERP: 0.0001 minimum
+  else if (marketIndex === 2) 
+    minStep = 1_000_000;  // BTC-PERP: 0.001 minimum
   const adjusted = Math.max(raw, minStep);
   return new BN(adjusted);
 }
 
+// Open a perpetual position
+// LONG = profit when price increases, SHORT = profit when price decreases
 async function openPosition(
   marketIndex: number,
   direction: 'long' | 'short',
@@ -304,6 +362,7 @@ async function openPosition(
     const baseAmount = toBaseAmount(size, marketIndex);
     console.log(`Base amount: ${baseAmount.toString()}`);
 
+    // Place market order - executes immediately at best price
     const txSig = await driftClient.placePerpOrder({
       orderType: OrderType.MARKET,
       marketIndex,
@@ -458,6 +517,12 @@ async function main() {
         break;
       }
 
+      case 'deposit-sol': {
+        const amt = parseFloat(process.argv[3] || '1');
+        await depositSolCollateral(amt);
+        break;
+      }
+
       case 'balance':
         await getAccountValue();
         break;
@@ -485,7 +550,8 @@ async function main() {
         console.log('  drift:status     - Account status');
         console.log('  drift:init       - Initialize account');
         console.log('  drift:markets    - List markets');
-        console.log('  drift:deposit    - Deposit USDC');
+        console.log('  drift:deposit    - Deposit USDC collateral');
+        console.log('  drift deposit-sol <amount> - Deposit SOL collateral');
         console.log('  drift:balance    - Check balance');
         console.log('  drift:positions  - View positions');
         console.log('  drift:open       - Open position');
@@ -493,6 +559,7 @@ async function main() {
         console.log('  drift:doctor     - Debug info');
         console.log('\nExamples:');
         console.log('  npm run drift:deposit 100');
+        console.log('  npm run drift deposit-sol 2');
         console.log('  npm run drift:open 0 long 0.01');
         console.log('  npm run drift:close 0');
     }

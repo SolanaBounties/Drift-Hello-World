@@ -36,6 +36,10 @@ export class DriftController {
   deposit(@Query('amount') amt: string) {
     return this.drift.depositUsdc(Number(amt ?? 5));
   }
+  @Post('deposit-sol')
+  depositSol(@Query('amount') amt: string) {
+    return this.drift.depositSol(Number(amt ?? 1));
+  }
   @Get('doctor') doctor() {
     return this.drift.doctor();
   }

@@ -45,7 +45,14 @@ export class DriftService implements OnModuleInit, OnModuleDestroy {
   private readonly rpcUrl =
     process.env.RPC_URL || 'https://api.devnet.solana.com';
   private readonly commitment: Commitment = 'confirmed';
+  
+  private lastFetchTime = 0;
+  private fetchCooldown = 1000;
+  
+  // Drift supports multiple sub-accounts per wallet for position isolation
   private readonly subAccountId = 0;
+  
+  // Base precision for perpetual contract sizes (9 decimals)
   private readonly BASE = 1_000_000_000;
 
   async onModuleInit() {
@@ -68,6 +75,9 @@ export class DriftService implements OnModuleInit, OnModuleDestroy {
     const keypair = Keypair.fromSecretKey(bs58.decode(secretKey));
     this.wallet = new Wallet(keypair);
 
+    // Initialize Drift client with devnet configuration
+    // The SDK handles all protocol interactions including order placement,
+    // position management, and account state synchronization
     this.driftClient = new DriftClient({
       connection: this.connection,
       wallet: this.wallet,
@@ -75,22 +85,28 @@ export class DriftService implements OnModuleInit, OnModuleDestroy {
       activeSubAccountId: this.subAccountId,
     });
 
+    // Subscribe to account updates for real-time position and balance data
     await this.driftClient.subscribe();
     this.logger.log(
       `Drift connected on Devnet. Wallet ${this.wallet.publicKey.toBase58()}`,
     );
   }
 
+  // Get USDC mint address from Drift's spot market configuration
+  // Spot market 0 is USDC on devnet
   private getUsdcMint(): PublicKey {
     return new PublicKey(SpotMarkets['devnet'][0].mint);
   }
 
+  // Determine if USDC uses standard Token Program or Token-2022
   private async getMintProgramId(mint: PublicKey): Promise<PublicKey> {
     const info = await this.connection.getAccountInfo(mint);
     if (!info) throw new Error('USDC mint account not found on chain');
     return info.owner;
   }
 
+  // Ensure Associated Token Account exists for USDC
+  // ATA is a deterministic address for holding SPL tokens
   private async ensureUsdcAta(): Promise<PublicKey> {
     const mint = this.getUsdcMint();
     const programId = await this.getMintProgramId(mint);
@@ -162,14 +178,17 @@ export class DriftService implements OnModuleInit, OnModuleDestroy {
     return moved;
   }
 
+  // Convert human-readable size to base units with minimum step sizes
+  // Each market has different precision requirements
   private toBaseAmount(size: number, marketIndex: number): BN {
     const raw = Math.round(size * this.BASE);
     let minStep = 1;
     if (marketIndex === 0)
-      minStep = 10_000_000;
+      minStep = 10_000_000;  // SOL-PERP: 0.01 minimum
     else if (marketIndex === 1)
-      minStep = 100_000;
-    else if (marketIndex === 2) minStep = 1_000_000;
+      minStep = 100_000;  // ETH-PERP: 0.0001 minimum
+    else if (marketIndex === 2) 
+      minStep = 1_000_000;  // BTC-PERP: 0.001 minimum
     return new BN(Math.max(raw, minStep));
   }
 
@@ -190,6 +209,8 @@ export class DriftService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
+  // Initialize a Drift user account for this wallet
+  // Required before trading - creates on-chain account to track positions
   async initAccount() {
     try {
       const tx = await this.driftClient.initializeUserAccount(
@@ -213,41 +234,54 @@ export class DriftService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  async positions() {
+  private async rateLimitedFetch() {
+    const now = Date.now();
+    const elapsed = now - this.lastFetchTime;
+    if (elapsed < this.fetchCooldown) {
+      await new Promise((r) => setTimeout(r, this.fetchCooldown - elapsed));
+    }
     await this.driftClient.fetchAccounts();
+    this.lastFetchTime = Date.now();
+  }
+
+  async positions() {
+    await this.rateLimitedFetch();
     const user = this.driftClient.getUser(this.subAccountId);
-    const perps = user.getActivePerpPositions().map((p) => {
-      const market = PerpMarkets['devnet'].find(
-        (m) => m.marketIndex === p.marketIndex,
-      );
-      const isLong = p.baseAssetAmount.gt(new BN(0));
-      const size = p.baseAssetAmount.abs().toNumber() / this.BASE;
+    const perps = user
+      .getActivePerpPositions()
+      .filter((p) => !p.baseAssetAmount.eq(new BN(0)))
+      .map((p) => {
+        const market = PerpMarkets['devnet'].find(
+          (m) => m.marketIndex === p.marketIndex,
+        );
+        const isLong = p.baseAssetAmount.gt(new BN(0));
+        const size = p.baseAssetAmount.abs().toNumber() / this.BASE;
 
-      let entryPrice = 0;
-      if (
-        !p.quoteAssetAmount.eq(new BN(0)) &&
-        !p.baseAssetAmount.eq(new BN(0))
-      ) {
-        const quote = p.quoteAssetAmount.abs().toNumber() / 1_000_000;
-        const base = p.baseAssetAmount.abs().toNumber() / this.BASE;
-        entryPrice = quote / base;
-      }
+        let entryPrice = 0;
+        if (
+          !p.quoteAssetAmount.eq(new BN(0)) &&
+          !p.baseAssetAmount.eq(new BN(0))
+        ) {
+          const quote = p.quoteAssetAmount.abs().toNumber() / 1_000_000;
+          const base = p.baseAssetAmount.abs().toNumber() / this.BASE;
+          entryPrice = quote / base;
+        }
 
-      return {
-        marketIndex: p.marketIndex,
-        marketSymbol: market?.symbol ?? `Market ${p.marketIndex}`,
-        direction: isLong ? 'LONG' : 'SHORT',
-        size,
-        entryPrice,
-        rawBase: p.baseAssetAmount.toString(),
-      };
-    });
+        return {
+          marketIndex: p.marketIndex,
+          marketSymbol: market?.symbol ?? `Market ${p.marketIndex}`,
+          direction: isLong ? 'LONG' : 'SHORT',
+          size,
+          entryPrice,
+          rawBase: p.baseAssetAmount.toString(),
+        };
+      });
 
     return { perps };
   }
 
   async accountValue() {
-    await this.driftClient.fetchAccounts();
+    await this.rateLimitedFetch();
     const user = this.driftClient.getUser(this.subAccountId);
     const spots = user.getActiveSpotPositions().map((s) => {
       const m = SpotMarkets['devnet'][s.marketIndex];
@@ -270,6 +304,8 @@ export class DriftService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
+  // Open a perpetual position on a specified market
+  // LONG = profit when price rises, SHORT = profit when price falls
   async open(marketIndex: number, direction: Direction, size: number) {
     try {
       const userAccountPk = await getUserAccountPublicKey(
@@ -286,6 +322,8 @@ export class DriftService implements OnModuleInit, OnModuleDestroy {
       }
 
       const baseAmount = this.toBaseAmount(size, marketIndex);
+      
+      // Place a market order that executes immediately at best available price
       const txSig = await this.driftClient.placePerpOrder({
         orderType: OrderType.MARKET,
         marketIndex,
@@ -294,7 +332,7 @@ export class DriftService implements OnModuleInit, OnModuleDestroy {
         baseAssetAmount: baseAmount,
       });
 
-      await this.driftClient.fetchAccounts();
+      await this.rateLimitedFetch();
       const user = this.driftClient.getUser(this.subAccountId);
       const pos = user.getPerpPosition(marketIndex);
 
@@ -314,8 +352,10 @@ export class DriftService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  // Close an existing position by placing opposite order
+  // LONG positions close with SHORT order, SHORT positions close with LONG order
   async close(marketIndex: number) {
-    await this.driftClient.fetchAccounts();
+    await this.rateLimitedFetch();
     const user = this.driftClient.getUser(this.subAccountId);
     const pos = user.getPerpPosition(marketIndex);
 
@@ -323,9 +363,11 @@ export class DriftService implements OnModuleInit, OnModuleDestroy {
       return { ok: false, reason: 'no-open-position' };
     }
 
+    // Determine opposite direction to close position
     const isLong = pos.baseAssetAmount.gt(new BN(0));
     const dir = isLong ? PositionDirection.SHORT : PositionDirection.LONG;
 
+    // reduceOnly ensures we only close existing position, not open new one
     const txSig = await this.driftClient.placePerpOrder({
       orderType: OrderType.MARKET,
       marketIndex,
@@ -341,6 +383,8 @@ export class DriftService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
+  // Deposit USDC collateral to Drift account
+  // Collateral is required to open leveraged positions
   async depositUsdc(amount: number) {
     const userAccountPk = await getUserAccountPublicKey(
       this.driftClient.program.programId,
@@ -369,7 +413,56 @@ export class DriftService implements OnModuleInit, OnModuleDestroy {
     }
 
     const depositAmount = new BN(Math.round(amount * 10 ** dp));
+    // Deposit to spot market 0 (USDC) on Drift
     const tx = await this.driftClient.deposit(depositAmount, 0, ata);
+    const sig = Array.isArray(tx) ? tx[0] : tx;
+
+    return {
+      ok: true,
+      signature: sig,
+      solscan: `https://solscan.io/tx/${sig}?cluster=devnet`,
+    };
+  }
+
+  async depositSol(amount: number) {
+    const userAccountPk = await getUserAccountPublicKey(
+      this.driftClient.program.programId,
+      this.wallet.publicKey,
+      this.subAccountId,
+    );
+    if (!(await this.connection.getAccountInfo(userAccountPk))) {
+      throw new Error('Drift account not initialized');
+    }
+
+    const walletLamports = await this.connection.getBalance(
+      this.wallet.publicKey,
+    );
+    const walletSol = walletLamports / 1e9;
+    const minReserve = 0.05;
+
+    if (walletSol < amount + minReserve) {
+      return {
+        ok: false,
+        reason: 'insufficient-sol',
+        have: walletSol,
+        need: amount,
+        note: `Keep ${minReserve} SOL for tx fees`,
+      };
+    }
+
+    const solMarketIndex = SpotMarkets['devnet'].findIndex(
+      (m) => m.symbol === 'SOL',
+    );
+    if (solMarketIndex === -1) {
+      throw new Error('SOL spot market not found in Drift devnet config');
+    }
+
+    const depositAmount = new BN(Math.round(amount * 1e9));
+    const tx = await this.driftClient.deposit(
+      depositAmount,
+      solMarketIndex,
+      this.wallet.publicKey,
+    );
     const sig = Array.isArray(tx) ? tx[0] : tx;
 
     return {

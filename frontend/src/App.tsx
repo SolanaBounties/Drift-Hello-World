@@ -1,16 +1,21 @@
 import { useEffect, useState } from 'react';
+import { useWallet } from '@solana/wallet-adapter-react';
+import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import './App.css';
 
 export default function App() {
+  const { publicKey, connected } = useWallet();
+  
   const [status, setStatus] = useState<any>(null);
   const [markets, setMarkets] = useState<any[]>([]);
   const [positions, setPositions] = useState<any[]>([]);
   const [loading, setLoading] = useState<string | boolean>(false);
   const [message, setMessage] = useState('');
 
-  const [marketIndex, setMarketIndex] = useState(0);
+  // Trading parameters
+  const [marketIndex, setMarketIndex] = useState(0);  // 0=SOL, 1=BTC, 2=ETH
   const [direction, setDirection] = useState('long');
-  const [size, setSize] = useState(0.01);
+  const [size, setSize] = useState(0.01);  // Start small for testing
 
   const showMessage = (msg: string) => {
     setMessage(msg);
@@ -46,12 +51,15 @@ export default function App() {
       const res = await fetch('/drift/init', { method: 'POST' });
       const data = await res.json();
       showMessage(data.already ? 'Account already exists' : 'Account created!');
+      setTimeout(() => loadData(), 1500);
     } catch {
       showMessage('Failed to initialize');
     }
     setLoading(false);
   };
 
+  // Open a new perpetual position
+  // Requires: initialized account + sufficient collateral
   const openPosition = async () => {
     setLoading('open');
     showMessage('Sending transaction...');
@@ -60,10 +68,11 @@ export default function App() {
       const data = await res.json();
       
       if (data.signature) {
-        showMessage(`Position opened! TX: ${data.signature.slice(0, 8)}... (Click Refresh to update)`);
+        showMessage(`Position opened! TX: ${data.signature.slice(0, 8)}...`);
+        setTimeout(() => loadData(), 2000);
       } else if (data.message) {
         if (data.message.includes('InsufficientCollateral') || data.message.includes('Insufficient collateral')) {
-          showMessage('Not enough USDC! Deposit collateral first');
+          showMessage('Not enough collateral! Deposit first: npm run drift deposit-sol 2');
         } else {
           showMessage(`Failed: ${data.message}`);
         }
@@ -73,7 +82,7 @@ export default function App() {
     } catch (e: any) {
       const errMsg = e.message || 'Unknown error';
       if (errMsg.includes('InsufficientCollateral')) {
-        showMessage('Not enough USDC! Deposit collateral first');
+        showMessage('Not enough collateral! Deposit first: npm run drift deposit-sol 2');
       } else {
         showMessage(`Error: ${errMsg.slice(0, 50)}`);
       }
@@ -90,7 +99,8 @@ export default function App() {
       const data = await res.json();
       
       if (data.ok && data.signature) {
-        showMessage(`Position closed! TX: ${data.signature.slice(0, 8)}... (Click Refresh to update)`);
+        showMessage(`Position closed! TX: ${data.signature.slice(0, 8)}...`);
+        setTimeout(() => loadData(), 2000);
       } else if (data.reason) {
         showMessage(`Failed: ${data.reason}`);
       } else {
@@ -110,8 +120,18 @@ export default function App() {
   return (
     <div className="app">
       <header>
-        <h1>Drift Protocol</h1>
-        <p>Solana Devnet - Educational Demo</p>
+        <div className="header-top">
+          <div>
+            <h1>Drift Protocol</h1>
+            <p>Solana Devnet - Educational Demo</p>
+          </div>
+          <WalletMultiButton />
+        </div>
+        {connected && publicKey && (
+          <div className="wallet-info">
+            Connected: {publicKey.toBase58().slice(0, 4)}...{publicKey.toBase58().slice(-4)}
+          </div>
+        )}
         <button onClick={loadData} className="refresh-btn">
           Refresh Data
         </button>
@@ -133,7 +153,7 @@ export default function App() {
                 </button>
               )}
               {status.accountExists && (
-                <p className="warning-text">Note: Deposit USDC collateral before opening positions</p>
+                <p className="warning-text">Note: Deposit SOL or USDC collateral before opening positions (CLI: `npm run drift deposit-sol 2`)</p>
               )}
             </div>
           ) : (
@@ -145,23 +165,27 @@ export default function App() {
           <h2>Active Positions</h2>
           {positions.length > 0 ? (
             <div className="positions-list">
-              {positions.map((pos) => (
-                <div key={pos.marketIndex} className="position">
-                  <div className="position-info">
-                    <strong>{pos.marketSymbol}</strong>
-                    <span className={pos.direction === 'LONG' ? 'badge long' : 'badge short'}>{pos.direction}</span>
-                    <span>Size: {pos.size.toFixed(4)}</span>
-                    <span>Entry: ${pos.entryPrice.toFixed(2)}</span>
+              {positions.map((pos) => {
+                const isClosing = loading === `close-${pos.marketIndex}`;
+                return (
+                  <div key={pos.marketIndex} className={`position ${isClosing ? 'closing' : ''}`}>
+                    <div className="position-info">
+                      <strong>{pos.marketSymbol}</strong>
+                      <span className={pos.direction === 'LONG' ? 'badge long' : 'badge short'}>{pos.direction}</span>
+                      {isClosing && <span className="badge closing-badge">CLOSING...</span>}
+                      <span>Size: {pos.size.toFixed(4)}</span>
+                      <span>Entry: ${pos.entryPrice.toFixed(2)}</span>
+                    </div>
+                    <button 
+                      onClick={() => closePosition(pos.marketIndex)} 
+                      disabled={isClosing}
+                      className="btn-close"
+                    >
+                      {isClosing ? 'Closing...' : 'Close'}
+                    </button>
                   </div>
-                  <button 
-                    onClick={() => closePosition(pos.marketIndex)} 
-                    disabled={loading === `close-${pos.marketIndex}`}
-                    className="btn-close"
-                  >
-                    {loading === `close-${pos.marketIndex}` ? 'Closing...' : 'Close'}
-                  </button>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <p className="empty">No active positions</p>

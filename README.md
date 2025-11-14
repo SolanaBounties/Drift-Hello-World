@@ -18,29 +18,31 @@ npm install
 
 # 2) Configure backend (add your Solana wallet key)
 cd backend
-# Create .env file with: SECRET_KEY_BASE58=your_key_here
+echo "SECRET_KEY_BASE58=your_key_here" > .env
 cd ..
 
 # 3) Start everything
-npm run up
+npm run dev
 
 # 4) Open browser
 # Frontend: http://localhost:5173
 # Backend:  http://localhost:3000
 ```
 
-## Usage
+1. **Connect Wallet** - Click "Select Wallet" button (Phantom, Solflare, etc.)
+2. **Initialize Account** - Click "Initialize Account" button (first time only)
+3. **Deposit Collateral** - Choose either:
+   - **SOL**: `npm run drift deposit-sol 2` (Uses your existing SOL!)
+   - **USDC**: `npm run drift:deposit 100` (Requires Devnet USDC airdrop)
+4. **Select Market** - Choose SOL-PERP, BTC-PERP, or ETH-PERP
+5. **Open Position** - Pick Long/Short direction and size (start with 0.01)
+6. **Close Position** - Click "Close" button on active position
 
-1. **Initialize Account** - Click button in Status section (first time only)
-2. **Select Market** - Choose SOL-PERP, BTC-PERP, or ETH-PERP
-3. **Open Position** - Pick Long/Short direction and size (0.01 for testing)
-4. **Close Position** - Click Close button on any active position
+## Resources
 
-## Documentation
-
-- **QUICKSTART.md** - Fast setup guide
-- **DRIFT_GUIDE.md** - Complete user guide with troubleshooting
-- **Drift Docs** - https://docs.drift.trade
+- [Drift Protocol](https://drift.trade)
+- [Drift Documentation](https://docs.drift.trade)
+- [Solana Devnet Faucet](https://faucet.solana.com)
 
 ## Project Structure
 
@@ -49,23 +51,24 @@ npm run up
 │   └── src/
 │       ├── drift.controller.ts    # API endpoints
 │       ├── drift.service.ts       # Drift Protocol logic
-│       └── drift.module.ts
-├── frontend/          # React + TypeScript UI
-│   └── src/
-│       ├── App.tsx               # Main component
-│       └── App.css               # Solana-themed styles
-└── database/          # SQLite (optional, for examples)
+│       ├── drift.module.ts        # Module config
+│       └── drift-cli.ts           # CLI tool
+└── frontend/          # React + TypeScript UI
+    └── src/
+        ├── App.tsx                # Main component
+        └── App.css                # Solana-themed styles
 ```
 
 ## Tech Stack
 
 - **Frontend**: React 19, TypeScript, Vite
-- **Backend**: NestJS, Drift SDK
-- **Blockchain**: Solana Devnet
+- **Backend**: NestJS, Drift SDK and Solana Devnet
 
 ## Development
-
 ```bash
+# Start both (recommended)
+npm run dev
+
 # Start backend only
 npm run dev:api
 
@@ -74,9 +77,6 @@ npm run dev:web
 
 # Build everything
 npm run build
-
-# Run sanity check
-npm run sanity
 ```
 
 ## Key Concepts
@@ -100,8 +100,14 @@ Decentralized perpetual futures exchange on Solana
 - Verify `SECRET_KEY_BASE58` is set
 
 **Can't open positions?**
-- Initialize Drift account first
+- Initialize Drift account first (`npm run drift:init`)
+- Deposit collateral: `npm run drift deposit-sol 2` (easiest!)
 - Ensure devnet SOL for transaction fees
+
+**Hitting rate limits?**
+- Free RPC has strict limits - the app now includes rate limiting
+- Get a free RPC from [Helius](https://helius.dev) or [QuickNode](https://quicknode.com)
+- Add to `.env`: `RPC_URL=https://your-rpc-url`
 
 **Connection errors?**
 - Confirm backend running on port 3000
